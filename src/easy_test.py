@@ -6,6 +6,10 @@ import sys
 sys.path.append('python')
 import numpy as np
 import cv2
+from scipy.spatial.transform import Rotation as R
+
+
+
 print('Program started')
 try:
     import sim as vrep
@@ -21,21 +25,48 @@ import time
 print('Program started')
 vrep.simxFinish(-1)  # just in case, close all opened connections
 clientID = vrep.simxStart('127.0.0.1', 19999, True, True, 5000, 5)
-clientID2 = vrep.simxStart('127.0.0.1', 9999, True, True, 5000, 5)
 
-if ((clientID != -1) and (clientID2 != -1)) :
+
+
+def get_ori_pos(obj,rel):
+    res, rel_handle = vrep.simxGetObjectHandle(clientID, rel, vrep.simx_opmode_streaming)
+    res, obj_handle = vrep.simxGetObjectHandle(clientID, obj, vrep.simx_opmode_streaming)
+    res, pos = vrep.simxGetObjectPosition(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
+    res, ori = vrep.simxGetObjectOrientation(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
+    res, quat = vrep.simxGetObjectQuaternion(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
+    return pos,quat
+
+def get_trans_matrix(pos,ori):
+    transformation_matrix = np.array([[0, 0, 0, 0],
+                                      [0, 0, 0, 0],
+                                      [0, 0, 0, 0],
+                                      [0, 0, 0, 1]],
+                                     dtype=float)
+    try:
+        r = R.from_quat(ori)
+        transformation_matrix[0][3] = pos[0]
+        transformation_matrix[1][3] = pos[1]
+        transformation_matrix[2][3] = pos[2]
+
+        transformation_matrix[:3, :3] = r.as_matrix()
+    except:
+        1;
+    return transformation_matrix
+
+
+
+if (clientID != -1) :
     print('Connected to remote API server')
     res, v0 = vrep.simxGetObjectHandle(clientID, 'Vision_global_rgb', vrep.simx_opmode_oneshot_wait)
     res, v1 = vrep.simxGetObjectHandle(clientID, 'Vision_global_depth', vrep.simx_opmode_oneshot_wait)
     res, resolution, image = vrep.simxGetVisionSensorImage(clientID, v0, 0, vrep.simx_opmode_streaming)
 
-    res, tf_handle = vrep.simxGetObjectHandle(clientID2, 'Franka_link5', vrep.simx_opmode_streaming)
-    res, tf = vrep.simxGetJointMatrix(clientID2, tf_handle, vrep.simx_opmode_streaming)
-
 
 
     imcount = 0
     while (vrep.simxGetConnectionId(clientID) != -1):
+        print(imcount)
+
         res, resolution, image = vrep.simxGetVisionSensorImage(clientID, v0, 0, vrep.simx_opmode_buffer)
         if res == vrep.simx_return_ok:
             imcount = imcount + 1
@@ -55,15 +86,20 @@ if ((clientID != -1) and (clientID2 != -1)) :
             cv2.imshow("RGB_Image", rgb_img)
             cv2.imshow("DEPTH_Image", depth_img)
 
-            res, tf_handle = vrep.simxGetObjectHandle(clientID, 'Franka_joint5', vrep.simx_opmode_streaming)
-            res, tf = vrep.simxGetJointPosition(clientID, tf_handle, vrep.simx_opmode_streaming)
-            print("tf is: ------")
-            print(tf)
+            marker00_to_joint3_pos,marker00_to_joint3_ori = get_ori_pos('Marker_4x4_1000_0', 'Franka_joint3')
+            trans_matrix_marker00_to_joint3 = get_trans_matrix(marker00_to_joint3_pos,marker00_to_joint3_ori)
+
+      #      print(trans_matrix_marker00_to_joint3)
+
+            pos2, ori2 = get_ori_pos( 'Franka_joint3','Marker_4x4_1000_0')
+            trans_2 = get_trans_matrix(pos2, ori2)
+         #   print(trans_2)
+            print(np.multiply(trans_matrix_marker00_to_joint3, trans_2))
 
 
             cv2.waitKey(1)
             # time.sleep(1)
-            print(imcount)
+
         else:
             print('Failed to show rgb and depth image')
 else:
