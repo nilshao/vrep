@@ -41,15 +41,21 @@ except:
 import time
 print('Program started')
 vrep.simxFinish(-1)  # just in case, close all opened connections
+clientID = vrep.simxStart('127.0.0.1', 19999, True, True, 5000, 5)
 
 
 
 def get_ori_pos(obj,rel):
-    res, rel_handle = vrep.simxGetObjectHandle(clientID, rel, vrep.simx_opmode_oneshot_wait)
-    res, obj_handle = vrep.simxGetObjectHandle(clientID, obj, vrep.simx_opmode_oneshot_wait)
+    print("target:",obj,rel)
+    print("clientid=",clientID)
+    res, obj_handle = vrep.simxGetObjectHandle(clientID, obj, vrep.simx_opmode_streaming)
+    res, rel_handle = vrep.simxGetObjectHandle(clientID, rel, vrep.simx_opmode_streaming)
+
     res, pos = vrep.simxGetObjectPosition(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
+
     res, ori = vrep.simxGetObjectOrientation(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
     res, quat = vrep.simxGetObjectQuaternion(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
+    print("inner", pos,quat)
     return pos,quat
 
 def get_trans_matrix(pos,ori):
@@ -70,7 +76,6 @@ def get_trans_matrix(pos,ori):
     return transformation_matrix
 
 
-clientID = vrep.simxStart('127.0.0.1', 19999, True, True, 5000, 5)
 if (clientID != -1) :
     print('Connected to remote API server')
     res, v0 = vrep.simxGetObjectHandle(clientID, 'Vision_global_rgb', vrep.simx_opmode_oneshot_wait)
@@ -103,59 +108,28 @@ if (clientID != -1) :
             depth_img.resize([depth_resolution[1], depth_resolution[0], 1])
             rgb_img = cv2.flip(rgb_img, 0)
             # depth_img = cv2.flip(depth_image, 0)
-####################Detect Marker#########################
 
-            print('-------------Marker Part Start-------------')
-            res, rgb_resolution, rgb_image2 = vrep.simxGetVisionSensorImage(clientID, v2, 0, vrep.simx_opmode_buffer)
-            rgb_img2 = np.array(rgb_image2, dtype=np.uint8)
-            rgb_img2.resize([rgb_resolution[1], rgb_resolution[0], 3])
-            rgb_img2 = cv2.flip(rgb_img2, 0)
+        #    res, v3 = vrep.simxGetObjectHandle(clientID, 'Dummy_Calibration', vrep.simx_opmode_oneshot_wait)
 
-            res, v2 = vrep.simxGetObjectHandle(clientID, 'Vision_calibration', vrep.simx_opmode_oneshot_wait)
-        #    cv2.imshow("RGB_Image", rgb_img2)
-        #    cv2.imshow("DEPTH_Image", depth_img)
-            pic_ori = rgb_img2
-            pic_gray = cv2.cvtColor(pic_ori, cv2.COLOR_BGR2GRAY)
+            print('start')
 
-
-
-
-            aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)  # Use 4x4 dictionary to find markers
-            parameters = aruco.DetectorParameters_create()  # Marker detection parameters
-            corners, ids, rejected_img_points = aruco.detectMarkers(pic_gray, ARUCO_DICTIONARY, parameters=ARUCO_PARAMETERS)
-            print(ids)
-
-            if np.all(ids is not None):  # If there are markers found by detector
-                num_of_markers = ids.size
-                res = aruco.estimatePoseSingleMarkers(corners, ARUCO_SIZE_METER, (matrix_coefficients),
-                                                      (distortion_coefficients))
-                rvec = res[0]
-                tvec = res[1]
-                #  markerPoints=res[2]
-
-                aruco.drawDetectedMarkers(pic_ori, corners, borderColor=( 0, 0, 255))  # Draw A square around the markers
-            cv2.imshow("RGB_Image", pic_ori)
-           # cv2.imshow("Gray_Image", pic_gray)
-
-            print('-------------Marker Part End---------------')
-##########################################################
-
-
-
-            pos1, ori1 = get_ori_pos('Dummy_Calibration', 'Dummy_Link4')
+            pos1, ori1 = get_ori_pos('Franka_joint4','Franka_joint1')
             trans_1 = get_trans_matrix(pos1, ori1)
             print(trans_1)
-
-            pos2, ori2 = get_ori_pos('Dummy_Link4', 'Dummy_Marker_0_')
+            pos2, ori2 = get_ori_pos('Franka_joint1', 'Franka_joint4')
             trans_2 = get_trans_matrix(pos2, ori2)
             print(trans_2)
+            print("-----\n",np.multiply(trans_2, trans_1))
+            '''
+            marker00_to_joint3_pos, marker00_to_joint3_ori = get_ori_pos('Marker_4x4_1000_0', 'Franka_joint3')
+            trans_matrix_marker00_to_joint3 = get_trans_matrix(marker00_to_joint3_pos, marker00_to_joint3_ori)
 
-            pos3, ori3 = get_ori_pos('Dummy_Marker_0_', 'Dummy_Calibration')
-            trans_3 = get_trans_matrix(pos3, ori3)
-
-            print(np.multiply(trans_1, trans_2))
-            print(np.multiply(np.multiply(trans_1,trans_2),trans_3))
-
+            pos2, ori2 = get_ori_pos('Franka_joint3', 'Marker_4x4_1000_0')
+            trans_2 = get_trans_matrix(pos2, ori2)
+            #   print(trans_2)
+            print(np.multiply(trans_2, trans_matrix_marker00_to_joint3))
+            '''
+            print('end')
 
             cv2.waitKey(1)
             # time.sleep(1)
