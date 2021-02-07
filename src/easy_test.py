@@ -50,7 +50,33 @@ def get_ori_pos(obj,rel):
     res, pos = vrep.simxGetObjectPosition(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
     res, ori = vrep.simxGetObjectOrientation(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
     res, quat = vrep.simxGetObjectQuaternion(clientID, obj_handle, rel_handle, vrep.simx_opmode_streaming)
-    return pos,quat
+    return pos, quat
+def cal_rotation_matrix(pos,ori):
+    transformation_matrix = np.array([[0, 0, 0, 0],
+                                      [0, 0, 0, 0],
+                                      [0, 0, 0, 0],
+                                      [0, 0, 0, 1]],
+                                     dtype=float)
+    x=ori[0]
+    y=ori[1]
+    z=ori[2]
+    w=ori[3]
+
+    transformation_matrix[0][3] = pos[0]
+    transformation_matrix[1][3] = pos[1]
+    transformation_matrix[2][3] = pos[2]
+
+    transformation_matrix[0][0] = 1-2*y*y-2*z*z
+    transformation_matrix[0][1] = 2*x*y-2*z*w
+    transformation_matrix[0][2] = 2*x*z+2*y*w
+    transformation_matrix[1][0] = 2*x*y+2*z*w
+    transformation_matrix[1][1] = 1-2*x*x-2*z*z
+    transformation_matrix[1][2] = 2*y*z-2*x*w
+    transformation_matrix[2][0] = 2*x*z-2*y*w
+    transformation_matrix[2][1] = 2*y*z+2*x*w
+    transformation_matrix[2][2] = 1-2*x*x-2*y*y
+
+    return transformation_matrix
 
 def get_trans_matrix(pos,ori):
     transformation_matrix = np.array([[0, 0, 0, 0],
@@ -117,9 +143,6 @@ if (clientID != -1) :
             pic_ori = rgb_img2
             pic_gray = cv2.cvtColor(pic_ori, cv2.COLOR_BGR2GRAY)
 
-
-
-
             aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)  # Use 4x4 dictionary to find markers
             parameters = aruco.DetectorParameters_create()  # Marker detection parameters
             corners, ids, rejected_img_points = aruco.detectMarkers(pic_gray, ARUCO_DICTIONARY, parameters=ARUCO_PARAMETERS)
@@ -134,28 +157,30 @@ if (clientID != -1) :
                 #  markerPoints=res[2]
 
                 aruco.drawDetectedMarkers(pic_ori, corners, borderColor=( 0, 0, 255))  # Draw A square around the markers
+
             cv2.imshow("RGB_Image", pic_ori)
            # cv2.imshow("Gray_Image", pic_gray)
 
             print('-------------Marker Part End---------------')
 ##########################################################
-
-
-
             pos1, ori1 = get_ori_pos('Dummy_Calibration', 'Dummy_Link4')
             trans_1 = get_trans_matrix(pos1, ori1)
-            print(trans_1)
+            test_1 = cal_rotation_matrix(pos1, ori1)
 
             pos2, ori2 = get_ori_pos('Dummy_Link4', 'Dummy_Marker_0_')
             trans_2 = get_trans_matrix(pos2, ori2)
-            print(trans_2)
+            test_2 = cal_rotation_matrix(pos2, ori2)
+
 
             pos3, ori3 = get_ori_pos('Dummy_Marker_0_', 'Dummy_Calibration')
             trans_3 = get_trans_matrix(pos3, ori3)
+            test_3 = cal_rotation_matrix(pos3, ori3)
 
-            print(np.multiply(trans_1, trans_2))
-            print(np.multiply(np.multiply(trans_1,trans_2),trans_3))
+            pos4, ori4 = get_ori_pos('Dummy_Calibration', 'Dummy_Marker_0_')
+            trans_4 = get_trans_matrix(pos4, ori4)
+            test_4 = cal_rotation_matrix(pos4, ori4)
 
+            print(np.matmul(np.matmul(trans_3,trans_2),trans_1))
 
             cv2.waitKey(1)
             # time.sleep(1)
