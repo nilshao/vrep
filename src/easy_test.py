@@ -24,7 +24,7 @@ rvec, tvec = None, None
 # distortion coefficients from camera calibration
 matrix_coefficients = np.array([np.array([886.491632, 0.000000, 511.684838]),
                                 np.array([0.000000, 886.695241, 511.899479]),
-                                np.array([0.0,                  0.0,                    1.0])])
+                                np.array([0.0,      0.0,        1.0])])
 distortion_coefficients = np.array([0.001557, -0.003481, 0.000230, 0.000175, 0.000000])
 
 print('Program started')
@@ -83,7 +83,7 @@ def get_trans_matrix(pos,ori):
                                       [0, 0, 0, 0],
                                       [0, 0, 0, 0],
                                       [0, 0, 0, 1]],
-                                     dtype=float)
+                                     dtype=float, )
     try:
         r = R.from_quat(ori)
         transformation_matrix[0][3] = pos[0]
@@ -101,7 +101,7 @@ if (clientID != -1) :
     print('Connected to remote API server')
     res, v0 = vrep.simxGetObjectHandle(clientID, 'Vision_global_rgb', vrep.simx_opmode_oneshot_wait)
     res, v1 = vrep.simxGetObjectHandle(clientID, 'Vision_global_depth', vrep.simx_opmode_oneshot_wait)
-    res, v2 = vrep.simxGetObjectHandle(clientID, 'Vision_calibration', vrep.simx_opmode_oneshot_wait)
+    res, v2 = vrep.simxGetObjectHandle(clientID, 'Vision_Calibration', vrep.simx_opmode_oneshot_wait)
 
     res, resolution, image = vrep.simxGetVisionSensorImage(clientID, v0, 0, vrep.simx_opmode_streaming)
     res, resolution, image2 = vrep.simxGetVisionSensorImage(clientID, v2, 0, vrep.simx_opmode_streaming)
@@ -137,7 +137,7 @@ if (clientID != -1) :
             rgb_img2.resize([rgb_resolution[1], rgb_resolution[0], 3])
             rgb_img2 = cv2.flip(rgb_img2, 0)
 
-            res, v2 = vrep.simxGetObjectHandle(clientID, 'Vision_calibration', vrep.simx_opmode_oneshot_wait)
+            res, v2 = vrep.simxGetObjectHandle(clientID, 'Vision_Calibration', vrep.simx_opmode_oneshot_wait)
         #    cv2.imshow("RGB_Image", rgb_img2)
         #    cv2.imshow("DEPTH_Image", depth_img)
             pic_ori = rgb_img2
@@ -146,7 +146,7 @@ if (clientID != -1) :
             aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)  # Use 4x4 dictionary to find markers
             parameters = aruco.DetectorParameters_create()  # Marker detection parameters
             corners, ids, rejected_img_points = aruco.detectMarkers(pic_gray, ARUCO_DICTIONARY, parameters=ARUCO_PARAMETERS)
-            print(ids)
+           # print(ids)
 
             if np.all(ids is not None):  # If there are markers found by detector
                 num_of_markers = ids.size
@@ -156,8 +156,44 @@ if (clientID != -1) :
                 tvec = res[1]
                 #  markerPoints=res[2]
 
+                # Estimate pose of each marker and return the values rvec and tvec---different from camera coefficients
                 aruco.drawDetectedMarkers(pic_ori, corners, borderColor=( 0, 0, 255))  # Draw A square around the markers
+                for i in range(0, ids.size):
 
+                    print(ids[i])
+
+                    basic_matrix = np.array([[1, 0, 0, 0],
+                                              [0, 1, 0, 0],
+                                              [0, 0, 1, 0],
+                                              [0, 0, 0, 1]],
+                                             dtype=float, )
+
+                    if(ids[i] == 0):
+                        pos, ori = get_ori_pos('Marker_4x4_1000_0', 'Vision_Calibration')
+                        trans = get_trans_matrix(pos, ori)
+                    elif(ids[i] == 10):
+                        pos, ori = get_ori_pos('Marker_4x4_1000_10', 'Vision_Calibration')
+                        trans = get_trans_matrix(pos, ori)
+
+                    elif(ids[i] == 23):
+                        pos, ori = get_ori_pos('Marker_4x4_1000_23', 'Vision_Calibration')
+                        trans = get_trans_matrix(pos, ori)
+
+
+                    # homogeneous matrix
+                    rotation_matrix = np.array([[0, 0, 0, 0],
+                                                [0, 0, 0, 0],
+                                                [0, 0, 0, 0],
+                                                [0, 0, 0, 1]],
+                                               dtype=float)
+                    rotation_matrix[:3, :3], _ = cv2.Rodrigues(rvec[i][0])
+                    rotation_matrix[0][3] = float(tvec[i][0][0])
+                    rotation_matrix[1][3] = float(tvec[i][0][1])
+                    rotation_matrix[2][3] = float(tvec[i][0][2])
+                    print(trans)
+                    print(rotation_matrix)
+                    print(np.matmul(basic_matrix, trans))
+                    print(np.matmul(basic_matrix, rotation_matrix))
             cv2.imshow("RGB_Image", pic_ori)
            # cv2.imshow("Gray_Image", pic_gray)
 
@@ -180,7 +216,7 @@ if (clientID != -1) :
             trans_4 = get_trans_matrix(pos4, ori4)
             test_4 = cal_rotation_matrix(pos4, ori4)
 
-            print(np.matmul(np.matmul(trans_3,trans_2),trans_1))
+            print(np.matmul(np.matmul(trans_3,trans_2),trans_1).round(4))
 
             cv2.waitKey(1)
             # time.sleep(1)
